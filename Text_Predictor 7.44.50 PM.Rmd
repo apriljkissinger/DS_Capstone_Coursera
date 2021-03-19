@@ -1,0 +1,524 @@
+---
+title: 'TxT.lt: A Text Prediction App in R, *v 3.14159*'
+author: "A. Kissinger"
+date: "03/17/2021"
+output:
+  html_document: default
+  pdf_document: default
+urlcolor: blue
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=50), tidy=TRUE)
+```
+
+```{r, message=FALSE, warning=FALSE,suppressPackageStartupMessages, echo=FALSE}
+
+# library(stringr)
+# library(tibble)
+# library(readr)
+# library(tm)
+# library(tidyverse)
+# library(tidytext)
+# library(ggplot2)
+# library(quanteda)
+# library(ggwordcloud)
+# library(irlba)
+# library(gridExtra)
+# library(MODIS)
+# library(markovchain)
+# library(qdap)
+# library(magrittr)
+# library(data.table)
+```
+
+\vspace{.5pt}
+
+The text prediction model TxT.lt was built using a corpus sampled from a corpora of news articles, blogs, and Twitter feeds. The sample corpus was cleaned, tokenized into n-grams where n={1:4}, and turned into document term matrices. The Kneser-Ney algorithm was built for smoothing and discounted using Good Turing frequency estimation. This was built for the Data Science Specialization Capstone Project given by the Johns Hopkins University on Coursera.
+
+\vspace{.5pt}
+
+## 1.0 Introduction to the Project and the Corpora
+
+Natural Language Processing (NLP) is the boundary where human communication meets artificial intelligence and AI attempts to simulate its patterns. It has a broad spectrum of applications each employing their own set of methodologies. When building an NLP model each step is context dependent and therefore the application should be kept in mind during the entirety of its creation. The goal of the Data Science Capstone Project is to build a next word predictive model for English text.
+
+To build a model for predicting English text, the following actions should be completed: (1) A *corpora*^[A corpora in NLP is a set of texts used to train and validate language models.] is chosen to be reflective of the model's desired output. (2) Sampling is done to produce a set of training and testing data. (3) Exploratory analysis of the corpora is completed. (4) Feature selection and extraction are performed. (5) Appropriate methodologies are found and employed. (6) Testing is performed to assess the accuracy of the model. (7) A data product or presentation is made to deploy and display the model. This is an iterative process and while the overall course of steps follow this flow, as information about the corpora and ML models become uncovered, backtracking and repeating earlier processes will most likely occur.  
+
+The corpora used to train and validate TxT.lt is a specific instance of the HC Corpora given to the class; the newest instance of the data set can be found here: http://corpora.epizy.com/corpora.html. This corpora is a set of web-scraped news articles, blogs and Twitter feeds. It is a well thought-out source as it covers the breadth of the English language; news articles tend to be non-stylistic and cover a particular set of jargon, blogs are somewhat stylistic, but are indicative of the way many write and include jargon from many sources, Twitter feeds are highly stylistic and will capture much of the common shorthand not captured by the news articles and blogs. 
+
+The model, validate and Shiny app scripts for this project can be found here: https://github.com/apriljkissinger/R_DataScience_Capstone 
+
+\vspace{.5pt}
+
+## 2.0 Data Sampling
+
+The data was sampled to create training and testing data sets; in general, the training data set is used to train the model, while the testing data set is used to test and sometimes tweak the model's performance. There are multiple ways sampling can be accomplished. For TxT.lt, sampling was done through stratified random splits using the *createDataPartition()* function in the *caret* package. During this process it is very important to set the seed as setting the seed ensures that every time the data is partitioned, the same partition is used and therefore the same data is always seen in both the training and testing sets.
+
+The data was partitioned in stages. The first partition of 0.5% was built for the testing set and was made before any other actions were taken on the corpora, keeping the testing set separate. The rest of the data, the 99.5%, will be referred to as the corpus data set. 60% of the corpus data was used for model training, and 10% of the remainder was used to create a lightweight data set for model development; the training data was so large, it was easier to set aside a small portion of data to vet the processes quickly before running them on the full training set.During model testing, Step (6), the testing data was partitioned by 10% which gave a total of 2136 texts to predict on. 
+
+\vspace{.5pt}
+
+## 3.0 Exploratory Analysis
+
+Exploratory analysis is the process of getting to know the data. For TxT.lt it was performed on the training data after sampling and then oscillated through several iterations during the feature selection steps.  
+
+### 3.1 Before Preprocessing    
+
+When looking at a data set a good first step is to take a snapshot to understand what it looks like both qualitatively and quantitatively; this data snapshot should be taken after the testing data set has been set aside. To look at the data quantitatively usually the *str()* and *summary()* functions are employed, but they did not offer much insight for the data used within this project, so the summary data frame below was constructed.  
+
+```{r, eval=TRUE}
+load(file="Summary.Rda")
+summary
+```
+
+The data contained more individual Twitter texts than the news and blogs texts combined, but the Twitter texts had the shortest average word count. The same information was examined for comparison after the preprocessing steps were completed; the word count does include duplicates.     
+
+**3.1.1 Text Excerpts Before Pre-Processing**  
+
+A simple way to look at the data qualitatively is to use the *head()* and *tail()* functions; these print the first or last six texts/rows/etc. respectively.  The data can also be looked at using individual or multiple indexes throughout the data set. Below are some example texts that were specifically chosen to illustrate the preprocessing to be completed.  
+
+Text 94 of the Twitter data:  
+```{r, eval=TRUE}
+load(file="tw.94.Rda")
+tw.94
+```
+
+Characters 145-178 of Text 8 in the blog data: 
+```{r}
+load(file="bl.8.rda")
+substring(bl.8, 145, 178)
+```
+
+
+
+Text 25262 of the news data:  
+```{r, eval=TRUE}
+load(file="nw.25262.rda")
+substring(nw.25262, 1, 64)
+```
+
+
+\vspace{.5pt}
+
+### 3.2 After Preprocessing
+
+Exploratory analysis was completed in iterations with the preprocessing steps. After the full preprocessing algorithm was completed and run on the corpus data set, the data frame below was constructed for comparison with the data frame before preprocessing. The number of unique words was found using the document term matrices described in Section 4.3, with minimum term frequency set to three.
+
+```{r, eval=TRUE}
+load(file="Summary.proc.Rda")
+summary.proc
+```
+\vspace{5pt}
+
+After preprocessing the average word count stayed approximatley the same. The removal of the extraneous information to our model such as hashtags, numbers, punctutaion, etc. decreased the file size by approximately half. And the word count increased as we separated on hyphens, brought contractions to their root words, and spelled out abbreviations. The preprocessing steps are described in Section 4.1.
+
+The number of unique words in the full corpus data set is given below. 'Min.Term.Freq.3' removes all terms not appearing in the dataset three or more times. Using a minimum term frequency helps strip the data of words that may be mispelled, uncommon names, etc., which increases processing speed. The majority of data, approximatley $72\%$ was stripped using a minimum term frequency of three vs. zero as seen below.    
+
+```{r, eval=TRUE}
+load(file="corpus.unique.rda")
+corpus.unique
+```
+\vspace{5pt}
+
+The rest of the exploratory analysis was done using the training data set. The table below gives unique word counts for the default processed text and three different filtering options: without stopwords, without profanity, and without both stopwords and profanity. This table was made using document term matrices with a minimum term frequency set to three. 
+
+```{r, eval=TRUE}
+load(file="options.unique.rda")
+options.unique
+```
+
+It is seen that after splitting the corpus data set by 60%, about 76% of the words were retained $(150,892/199,640*100=75.58)$. In the future increasing this percentage by increasing the cutoff for minimum term frequency and percentage used would be a good opportunity for optimization.
+
+\vspace{.5pt}
+
+**3.2.1 Text Excerpts After Pre-Processing**  
+
+Revisiting the same excerpts as before the preprosessing was completed exemplifies some of the steps taken.  
+
+Text 94 of the Twitter data no longer has the contraction "I'm", and instead has the root words "I" and "am".
+```{r, eval=TRUE}
+load(file="text.94.rda")
+text.94
+```
+
+Text 8 of the blogs data splits on the compound word 'half-dozen'. 
+```{r, eval=TRUE}
+load(file="bl.proc.8.Rda")
+bl.proc.8[26:32]
+```
+
+Text 25262 of the news data breaks down 'aka' to 'also', 'known', and 'as'.
+```{r, eval=TRUE}
+load(file="nw.proc.25262.rda")
+nw.proc.25262[1:11]
+```
+
+It can also be seen that all texts have been lowercased and tokenized^[Tokenization splits the corpus into smaller chunks called *tokens*. Tokens are used to create the feature-space for the prediction model.] and everything except the alphabet and spacing has been removed.
+
+**3.2.2 Exploratory Graphs** 
+
+Word clouds are a quick way to visualize word frequency within data sets. Below are word clouds of the top 50 uni-grams in the training data. The top cloud is made with no filtering options selected and the bottom cloud is with stop words filtered. The size of the words within the word clouds are dependent upon their counts within the corpus. It is seen that 'the', the most common word in the English language, is the largest word in the word cloud with no filtering options selected. Also, the size of words in the word cloud with stopwords filtered is much less distinguishable than the unfiltered cloud because the counts are more similar for these words. 
+
+
+![](clouds.jpg)
+
+\vspace{.5pt}
+
+Below are horizontal bar charts of the top 15 n-grams of each type. Because these are all common phrases, it implies the text was cleaned and tokenized well. 
+
+
+![](hists.jpg)
+
+\vspace{.5pt}
+
+## 4.0 Feature Selection and Extraction
+
+Feature selection reduces the number of variables the model uses to build its predictions. It is performed using a set of preprocessing steps tailored specifically to the desired prediction model. The goal of preprocessing for a predictive text model is to normalize the corpus into a canonical form; the further the corpus is normalized, the higher the outcome probabilities will be when the model is built. Once the text is processed, features are then constructed to be fed into the algorithms and build the model(s).  
+
+\vspace{.5pt}
+
+### 4.1 Feature Section: Preprocessing the Text 
+
+The corpus data was preprocessed and split into tokens using a series of steps bundled in a function. The preprocessing procedure applied to the corpus is explained below; maintaining the order of these steps is important.  
+
+1). Hyphens were replaced with spaces as hyphens are often used to create compound words and this step takes the words closer to their root forms, e.g. 'eye-opener' is broken down into 'eye' and 'opener' instead of 'eye-opener' as its own separate word.    
+2). Contractions were split to transform the words to their root words, e.g. ‘weren’t’ is broken down into ‘were’ and ‘not’ instead of staying as its own separate word.    
+3). Converted the corpora to all lowercase. The model should be case insensitive as it relies only on context, e.g. ‘Just’ and ‘just’ should be treated the same.  
+4). Removed all tokens that included a '@'. This removed both email addresses and Instagram mentions as well as assorted *random text noise* that is not useful to run predictions on.   
+5). Removed all tokens that included a '#'. This removed both hashtags as well as other assorted *random text noise* that is not useful to run predictions on.   
+6). Removed everything except the English alphabet and spacing. This removeed all numbers, additional symbols, and punctuation, all of which are ambiguous and unnecessary for the model.   
+7). Removed character strings that are commonly leftover after removing numbers, e.g. 'pm' and 'nd'.   
+8). Replaced a list of common abbreviations with their full spellings; this is not an exhaustive list.  
+9). Created a set of additional filtering options for the *text.proc.fun()* function using the argument stop.bad. If stop.bad is equal to: (1) Stopwords are removed, (2) Profanity is removed, (3) Both stopwords and profanity are removed.  
+
+\vspace{.5pt}
+
+### 4.2 Feature Extraction: Construction of N-grams and the Bag of N-grams Model
+
+The Bag of N-Grams model is an extension of the Bag-of-Words model and is based upon the Markov Assumption that to compute the probability of a sequence of events, only the probability of the sequence of the last few events needs to be computed; in the context of a text prediction model the events are individual words. The Bag of N-grams model retains some context around words by breaking sentences into chunks of words known as *n-grams* and finding their probabilities instead of finding full sentence probabilities; this vastly decreases the computations required. Txt.lt employs a quadri-gram model as its highest order model (n=4) and then backs off to lower order models (n={1:3}).  
+
+The sequence below is representative of a sentence where each letter represents a word. It shall be referred to as Sequence 'A' and will be used to illustrate the concepts used throughout the N-gram and Good Turing sections.  
+
+\vspace{.5pt}
+
+\[
+\displaystyle{ 'A \;\; B \;\; A \;\; C \;\; B \;\; B \;\; A \;\; C \;\; D\;'}
+\]
+
+\vspace{10pt}
+
+### 4.3 Document Term Matrices
+
+To construct tables of distinct n-grams, document term matrices (DTMs) were made for each n-gram type, where n={1:4}; three was used as the minimum term frequency for all DTMs. These matrices give the frequency of n-grams per text document of the corpus; each column is a distinct n-gram and each row is a text document giving the frequency of the n-grams. The DTMs were then summed by column to find the total count of each distinct n-gram and then data tables of the n-grams and their sums were made. 
+
+Below is an example portion of a DTM where text1 ends and text2 begins.
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+load(file="dtm.example.Rda")
+dtm.example
+```
+
+
+\vspace{.5pt}
+
+### 4.4 N-grams 
+
+To aide in understanding of n-grams, the following uni-, bi- and tri-gram sets were constructed based on *Sequence 'A'* above. 
+
+\vspace{10pt}
+Sequence A:
+\[
+\displaystyle{ 'A \;\; B \;\; A \;\; C \;\; B \;\; B \;\; A \;\; C \;\; D\;'}
+\]
+Uni-grams:
+\[
+\displaystyle{'A\;' \;\;\; \;\;\;          'B\;'  \;\;\; \;\;\;        'C\;' \;\;\; \;\;\;          'D\;'}
+\]
+Bi-grams:
+\[
+\displaystyle{'A\_B\;'   \;\;\; \;\;\;           'B\_A\;'   \;\;\; \;\;\;            'A\_C\;'   \;\;\; \;\;\;            'C\_B\;'   \;\;\; \;\;\;            'B\_B\;'   \;\;\; \;\;\;           'B\_A\;'   \;\;\; \;\;\;            'A\_C\;'   \;\;\; \;\;\;            'C\_D'}
+\]
+Tri-grams:
+\[ 
+\displaystyle{'A\_B\_A\;'   \;\;\; \;\;\;           'B\_A\_C\;'  \;\;\; \;\;\;            'A\_C\_B\;'   \;\;\; \;\;\;           'C\_B\_B\;'  \;\;\; \;\;\;            'B\_B\_A\;'   \;\;\; \;\;\;           'B\_A\_C\;'  \;\;\; \;\;\;            'A\_C\_D\;'}
+\]
+
+\vspace{10pt}
+
+As discussed earlier, splitting the corpus into n-grams allows for calculation of the probability of the n-gram instead of the probability of the sentence. To illustrate this, the formula for computing the probability of Sequence 'A' using the chain rule of probability is given below.   
+
+\vspace{.5pt}
+
+\[
+{ P('A \; B \; A \; C \; B \; B \; A \; C \; D\;')=P(A)*P(B|A)*P(A|A\;B)*P(C|A\;B\;A)*P(B|A\;B\;A\;C) }
+\]
+\[
+*\;P(B|A\;B\;A\;C\;B)*P(A|A\;B\;A\;C\;B\;B)*P(C|A\;B\;A\;C\;B\;B\;A)*P(D|A\;B\;A\;C\;B\;B\;A\;C)
+\]
+
+\vspace{10pt}
+
+Whereas the probability of bi-gram 'A B' depends only on the probability of B given A. 
+
+\vspace{.5pt}
+
+\[{P('A\:B\:')=P(B|A})\]
+
+\vspace{.5pt}
+
+And the probability of tri-gram 'A B A' depends only on the probability of 'A' given 'A B'.
+
+\vspace{.5pt}
+
+\[{P('A\:B\:A\;')=P(A|A\;B)}\]
+
+\vspace{.5pt}
+
+
+It is important to remember that the bi-gram and tri-gram probabilities are based on the Markov Assumption stated above.  
+
+For TxT.lt it was decided to employ a quadri-gram model; this model predicts the next word using the previous three words.
+
+\vspace{.5pt}
+
+## 5.0 Kneser-Ney Smoothing and Good Turing Frequency Estimation
+
+One of the trickier tasks in building a language model is how to predict on phrases never seen before, also known as *unseen n-grams*. To account for this, there are multiple smoothing algorithms that can be applied. For TxT.lt, Kneser-Ney smoothing with Good Turing Frequency Estimation was used. Kneser-Ney starts with the highest order model and then backs off to lower order models when an n-gram is not found. It is a form of Absolute Discounting Interpolation.
+
+\vspace{.5pt}
+
+### 5.1 Good-Turing Frequency Estimation
+
+Good Turing frequency estimation allows for a simple and useful way to allocate probability mass from seen n-grams to unseen n-grams. It uses the frequency of things occurring once to estimate the frequency of unseen things. To illustrate this using Sequence 'A', first the *N~c~*'s, the frequencies of counts, for the bi-grams in Sequence 'A' are found.
+
+\vspace{.5pt}
+\[
+\displaystyle{ Sequence\:'A\;':\;'A \;\; B \;\; A \;\; C \;\; B \;\; B \;\; A \;\; C \;\; D\;'}
+\]
+\[
+\displaystyle{bi\!-\!grams:\;\;'A\_B\;'   \;\;\; \;\;\;           'B\_A\;'   \;\;\; \;\;\;            'A\_C\;'   \;\;\; \;\;\;            'C\_B\;'   \;\;\; \;\;\;            'B\_B\;'   \;\;\; \;\;\;           'B\_A\;'   \;\;\; \;\;\;            'A\_C\;'   \;\;\; \;\;\;            'C\_D'}
+\]
+
+\vspace{.5pt}
+
+\[
+\displaystyle{N_1 ({\textit{How many bi-grams have a count of one?}}) = 4 = \;\;'A\_B\;'   \;\;\; \;\;\;'C\_B\;'   \;\;\; \;\;\;'B\_B\;'\;\;\; \;\;\;'C\_D'}
+\]
+\[
+\displaystyle{N_2 ({\textit{How many bi-grams have a count of two?}}) = 2 = \;\;           'B\_A\;'   \;\;\; 'A\_C\;'}
+\]
+
+\vspace{.5pt}
+
+The probability of *N~1~* is then found and used as the estimate for the frequency of unseen uni-grams.  
+$$
+P(N_1)=\frac{frequency \;of \;N_1}{\Sigma_{i=1}^x \;N_i}= \frac{4}{4+2}=\frac{4}{6}  =frequency\;of\;unseen\;bi\!-\!grams
+$$
+$$
+where\; \;x= highest \;order \;o\!f \;N_i
+$$
+
+\vspace{.5pt}
+
+This action effectively adds probability mass for any unseen bi-gram. When probability mass is added for unseen n-grams, the seen n-grams must be discounted to make space for the new probability mass because ${\Sigma P(N_c)}$ must equal {1}. To account for this, each count, ${c}$, obtained for the seen n-grams is discounted and its counterpart $c^*$ is found using the equation below.
+
+$$
+c^*=(c+1)\frac{N_{c+1}}{N_c}
+$$
+
+\vspace{.5pt}
+
+When this action is performed on a sizable corpus such as the project corpus, it produces a table of counts, ${c}$, and discounted counts, ${c^*}$. To calculate the absolute discount for each n-gram type, the n-gram data tables were put into the function *gt.disc.fun()* where the equation above was run over each line of data and then the absolute discount, $d$, for each n-gram type was found using $mean(c-c^*)=d$.  
+
+The Good Turing discounts calculated on the n-gram data tables using the *gt.disc.fun()* function are summarized below: 
+
+```{r, eval=TRUE}
+load(file="gt.data.Rda")
+gt.data
+```
+
+The discount is not calculated for uni-grams as backing off ends at the uni-gram model.
+
+\vspace{.5pt}
+
+### 5.2 Absolute Discounting Interpolation
+
+Absolute discounting smoothes by discounting counts at higher order n-gram types and using the aggregated probability mass from the discounted counts to interpolate or backooff to lower order models. The formula for absolute discount interpolation is shown below and each of its elements are described in the subsequent sections.
+
+\vspace{.5pt}
+
+$$
+P_{AbsDisc}(w_i|w_{i-n+1},...,w_{i-1}) = \frac{(max(c(w_{i-n+1},...,w_i))-d_{GT},0))}{c(w_{i-n+1},...,w_{i-1})} 
+$$
+\vspace{.5pt}
+$$
++\;\;\lambda(w_{i-n+1},...,w_{i-1})P_{AbsDisc}(w_i|w_{i-n+2},...,w_{i-1})
+$$
+\vspace{.5pt}
+<!--This may not look the best, but it gets the job done for now. -->
+$$
+P_{AbsDisc}(w_i|w_{i-n+1},...,w_{i-1}) = \;\;\;\;\;\;\;\;discounted,normalized\;\;\;\;\;\;+\;\;\;lambda\;\;\;*\;\;\;(n\!-\!1)\!-\!gram\:probability\\
+\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;n\!-\!gram\;count\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;
+$$
+
+\vspace{.5pt}
+
+When n-grams models are backed-off, the prediction algorithm starts at the highest order n-gram to look for predictions(s) and if the n-gram is not found or if the model needs more predictions, it backs off to the (n-1) gram to look for predictions(s), and continues to follow this pattern until the appropriate number of predictions are found, or until it stops with uni-grams. When the uni-gram probability is reached, backing off ends and the Most Likely Estimated (MLE) probability is used; this is just the count of the n-gram divided by the count of all uni-grams.
+
+\vspace{.5pt}
+$$
+P_{AbsDisc}(w_i)=P_{MLE}(w_i)=\frac{c(w_i)}{\Sigma_{w'\in L}c(w')}
+$$
+
+\vspace{.5pt}
+
+### 5.2.1 The Discounted Normalized N-gram Count
+
+
+The discounted, normalized n-gram count divides the discounted count, n-gram count minus the Good Turing discount, $d_{GT}$, by the number of times the prefix of words $i-1$ occur in the data set.  
+
+\vspace{.5pt}
+
+$$
+\frac{(max(c(w_{i-n+1},...,w_i))-d_{GT},0))}{c(w_{i-n+1},...,w_{i-1})}
+$$
+\vspace{.5pt}
+
+For example, if the tri-gram 'a_large_bag' appears in the data set twice, and the bi-gram 'a_large' appears 56 times, then the discounted, normalized n-gram count would be ${(max(2-d_{GT},0))/56}$, where $d_{GT}$ is the Good Turing discount obtained in Section 5.1. When  $d_{GT}$ is larger than the count of the n-gram, this term and therefore the full normalized count term go to zero, and the count's probability mass is fully given to the backoff function(s).  
+
+\vspace{.5pt}
+
+### 5.2.2 Lambda
+
+Lambda is the probability mass leftover from the discounted counts. It is known as the interpolation weight and is found by multiplying the normalized discount by the number of times the discount was applied. The $\bullet$ operator is known as an interpunct and represents that any value can be inserted to be part of the function. Here it is used in conjunction with $N_{+1}$ to denote the number of distinct words that follow the prefix of $i-1$ words; this is explained below.   
+
+\vspace{.5pt}
+
+$$
+\lambda(w_{i-n+1},...,w_{i-1}) = \frac{d}{c(w_{i-n+1},...,w_{i-1})}N_{1+}(w_{i-n+1},...,w_{i-1}\; \bullet )
+$$
+
+\vspace{.5pt}
+
+$$
+where\;\;d=\begin{cases} & {d_{GT}\;\;\;\;\;\;\;\;\;i\!f\;c(w_{i-n+1},...,w_i)>d_{GT}}\\ & {c(w_{i-n+1},...,w_i)\;\;\;\;\;\;\;\;\;\;\;\;otherwise}\end{cases}
+$$
+
+\vspace{.5pt}
+
+The normalized discount, $\frac{d}{c(w_{i-n+1},...,w_{i-1})}$, is found by dividing the discount $d$ by the number of times the prefix of $i-1$ words occurs in the data set. As the discount is the amount of probability mass given to the backoff probabilities from the discounted normalized count it is $d_{GT}$ if $d_{GT}<'\!\!n\!-\!gram\;count'$ and is the $'\!n\!-\!gram\;count'$ otherwise. The discount is applied for each distinct word that follows the prefix of $i-1$ words.. For the 'a_large_bag' example, this would be the distinct number of words following 'a_large'. 
+
+\vspace{.5pt}
+
+### 5.2.3 (n-1)-Gram Probability
+
+The (n-1)-gram probability is the start of the backing off to lower order n-grams; if looking to compute $P_{AbsDis}$ for a tri-gram given a quadri-gram model, the (n-1)-gram probability would be the $P_{AbsDisc}$ of the bi-gram as shown below. 
+\vspace{.5pt}
+
+$$
+P_{AbsDisc}(w_i|w_{i-n+2},...,w_{i-1})=   \frac{(max(c(w_{i-n+2},...,w_i))-d_{GT},0))}{c(w_{i-n+2},...,w_{i-1})} 
+$$
+\vspace{.5pt}
+$$
++\;\; \lambda(w_{i-n+2},...,w_{i-1})P_{AbsDisc}(w_i|w_{i-n+3},...,w_{i-1})
+$$
+
+\vspace{.5pt}
+
+In the 'a_large_bag' example, the (n-1)-gram probability is the probability of bi-gram 'large_bag'.
+
+\vspace{.5pt}
+
+### 5.3 Kneser-Ney Smoothing 
+
+
+Kneser-Ney smoothing is a form of absolute discounting, but instead of using the MLE probabilities, ${P_{AbsDisc}(w_i|w_{i-n+2},...,w_{i-1})}$, for the backoff probabilities, the continuation probabilities are used; the 'discounted, normalized n-gram count' from $P_{AbsDisc}$ is still used for the highest order n-gram model. The formula for the continuation probability of the lower order models is given below.    
+
+\vspace{.5pt}
+
+$$
+P_{KN}(w_i|w_{i-n+2},...,w_{i-1}) = \frac{(max(N_{1+}(\bullet\; w_{i-n+2},...,w_i),0))}{N_{1+}(\bullet\;w_{i-n+2},...,w_{i-1}\;\bullet)} + \lambda(w_{i-n+2},...,w_{i-1})P_{KN}(w_i|w_{i-n+3},...,w_{i-1})
+$$
+
+\vspace{.5pt}
+
+The continuation probability is the number of times the n-gram appeared as a novel continuation divided by the number of times the n-gram appeared as a novel continuation but ending with *any* uni-gram instead of, but including $w_i$.  For the 'a_large_bag' example, the continuation probability would be the number of times 'a_large_bag' appeared as a novel continuation of a quadri-gram divided by the number of times 'a_large' appeared as a novel continuation of a quadri-gram ending with any uni-gram.
+
+Continuation probabilities tend to produce more realistic results than their MLE counterparts and to understand why this is true, consider the classic example of the uni-gram 'Francisco'. The uni-gram 'Francisco' is almost always prefixed by the uni-gram 'San'. However, if we use the MLE probability and there are many occurences of the bi-gram 'San_Francisco' in the training corpus, this will give a higher prediction prediction weight to the uni-gram 'Francisco' than if it was treated as just a continuation of the word 'San'. So instead of the MLE probability, the distinct number of prefixes before the uni-gram 'Francisco' is used to calculate the backoff probability, also known as the 'continuation count', then 'Francisco' will have a much smaller prediction weight as its continuation count would be ~1 because it almost only occurs following the uni-gram 'San'.   
+
+
+The full equation for Kneser-Ney interpolation is given where the counts are *continuation counts* for all lower order n-gram models and *'counts'* for the highest order.
+
+\vspace{.5pt}
+
+$$
+P_{KN}(w_i|w_{i-n+1},...,w_{i-1}) = \frac{(max(c_{KN}(w_{i-n+1},...,w_{i}))-d,0))}{c_{KN}(w_{i-n+1},...,w_{i-1})} 
+$$
+
+$$
+ + \;w\lambda(w_{i-n+1},...,w_{i-1})P_{KN}(w_i|w_{i-n+2},...,w_{i-1})
+$$
+
+\vspace{.5pt}
+
+$$
+c_{KN}(\bullet)=\begin{cases} & {count\;\!(\bullet)\;\;\;for\;the\;highest\;order}\\ & {continuation\;count\;\!(\bullet)\;\;\;for\;the\;lower\;orders}\end{cases}
+$$
+
+
+\vspace{.5pt}
+
+The backing off stops with the uni-gram model shown below. It is the count of the number of times $w_i$ is a novel continuation in a bi-gram  divided by all novel bi-grams. 
+
+$$
+P_{KN}(w_i)=\frac{N_{1+}(\bullet w_i)}{N_{1+}(\bullet \bullet)}
+$$
+
+\vspace{.5pt}
+
+### 5.4 Model Creation
+
+The n-gram data tables were run through their respective Kneser Ney probability functions: *p.kn.(n-gram type).fun()*, e.g. quadri-grams were run through *p.kn.quadri.fun()*. This action produced a separate data table for each n-gram type with each n-gram and its Kneser Ney probability. This set of data tables formed the prediction model. 
+
+## 6 Model Evaluation
+
+There are two approaches to evaluating NLP models: intrinsically and extrinsincally. Intrinsic evaluation methods are suitable for evaluating all language models, but alone are usually not the best to evaluate a model's performance unless the testing data and the training data are very similar. Extrinsic evaluation involves using the model in a "real world" application, but this type of evaluation can be time consuming.   
+
+For TxT.lt, the model was validated extrinsically using the held out testing data set. The testing data was first preprocessed using the same function which was used to process the model.  Then the last four words of each text were split by word into a data table with columns corresponding to word order, i.e. 'first', 'second, 'third', 'fourth'. The columns 'first', 'second' , and 'third' were then run through the prediction application and all predictions were stored in a data table. The prediction values were then validated against the actual data from the 'fourth' column of the testing data set, printing 'TRUE' if the actual value was found in the predictions and 'FALSE' if not. The percentage of 'TRUE' values was calculated to determine the model's accuracy.  The algorithm with none of the filter options gave the correct prediction 795 times out of 2136, while the model with profanity removed predicted 792 of the texts correctly, but took a bit more time to run. The other two options, stopwords filtered and both stopwords and profanity filterd got about ~260 of the texts correct.  
+
+```{r, eval=TRUE}
+load(file="summary.preds.Rda")
+summary.preds
+```
+
+\vspace{.5pt}
+
+## 7 The Prediction App
+
+The Shiny application for the next word prediction model can be found here: [TxT.lt Application](https://apriljkissinger.shinyapps.io/TxT_lt_A_Text_Prediction_App/?_ga=2.180458020.2059751535.1612982397-1829170383.1606460550). The user inputs a word or a string of words into the text input and the application predicts the next word. The predictions are based on a quadri-gram model, therefore the best predictions will result from three or more words entered into the text input.  
+
+The application returns the next three word predictions by default, but can be configured to return up to twenty-five predictions. It does not filter stop or profanity words by default, however, the user has the option to remove them. The stop words are a pre-defined list by the *quanteda* package, and can be queried using the command *stopwords()*. The profanity list is Google's *'badwords.txt'* which can be found here: [Google's badwordslist](https://code.google.com/archive/p/badwordslist/downloads).  
+
+The most likely next word is given at the top of the main panel of the application and the data table underneath shows additional predictions with their associated probabilities.  
+
+The input text is cleaned using the same preprocessing procedure used on the model including any additional filters. The processed text is shown at the bottom of the screen; this is the text the backoff functions see.  
+
+
+\vspace{.5pt}
+
+## 8 Lessons Learned and Future Improvements
+
+Looking back on the project, there are a few things I would do if given more time. To improve speed and allow for a higher percentage used, the n-grams could be converted from character strings to numerics to decrease computation times. It would also be advantageous to use multiple Good Turing discounts for each count within the n-gram types instead of one discount for each type.  
+
+In addition, it would be beneficial to look at the vocabulary coverage while increasing minimum term frequency and increasing the percentage of the training data used. Constructing a stacked line chart with each line a different minimum term frequency and the dependent variable as the percentage of the training data used would produce an effective tool to study this relationship. These models would then go through validation testing to see the true effects of this relationship on the model.  
+
+It must be kept in mind that increasing data preprocessing will decrease the vocabulary size and therefore decrease the necessary minimum term frequency while retaining the percentage of training data used. The preprocessing performed would benefit from additional abbreviations.    
+
+Depending upon the application, the corpus and the cleaning steps can be tweaked to perform another task such as completing Shakespeare quotes, if the corpus was a compendium of Shakespeare's work.
+
+If you are reading this and have any questions or comments, please get in touch at [apriljkissinger@gmail.com](apriljkissinger@gmail.com).
+
+The model, validate and Shiny app scripts for this project can be found here: https://github.com/apriljkissinger/R_DataScience_Capstone 
+
+\vspace{.5pt}
+

@@ -1,0 +1,30 @@
+---
+title: "Prediction App Documentation"
+author: "A Kissinger"
+date: "2/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+```
+
+To use the prediction app, type a few words into the input area to start running the next word predictions. The word inputs are processed using the same steps used to preprocess the training data and build the model. The processed input text is shown in the bottom panel of the application.   
+
+The app is built on a quadri-gram model and therefore inputting three or more words will optimize the predictions given. If there is no input the top uni-gram predictions from the model will be given. Model smoothing is accomplished using Kneser-Ney with Good Turing discounting.    
+
+The number of predictions desired is chosen below the text input with a maximum of 25 predictions given. The top prediction is shown at the top and underneath is a table of all the predictions and their probabilities.  
+
+By default profanity and stop-words are included with the word predictions; stop words are the most common words in the language such as 'the', 'of', 'and', etc. These can be filtered out both separately and individually using the filters below the text input.   
+
+
+For more information, the full documentation can be found here: [Txt.lt Prediction Paper](https://rpubs.com/apriljkissinger/741424)  
+
+If you have any questions or feedback, please feel free to email me at <span style="color: red !important;">[apriljkissinger@gmail.com](mailto:apriljkissinger@gmail.com)</span>.
+
+
+
+
+
+
+

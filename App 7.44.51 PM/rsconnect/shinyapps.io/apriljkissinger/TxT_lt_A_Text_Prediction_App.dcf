@@ -1,0 +1,13 @@
+name: TxT_lt_A_Text_Prediction_App
+title: TxT_lt_A_Text_Prediction_App
+username:
+account: apriljkissinger
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3561081
+bundleId: 4364794
+url: https://apriljkissinger.shinyapps.io/TxT_lt_A_Text_Prediction_App/
+when: 1616087958.76784
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: .RData|dtm.example|gt.data.60.3.Rda|index.htm|Prediction.App.Documentation.html
